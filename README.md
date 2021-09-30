@@ -6,12 +6,15 @@ Li-Fraumeni syndrome (LFS) is an autosomal dominant cancer predisposition syndro
 
 This directory contains the following scripts which are used to preprocess methylation data and subsequently use that methylation data to predict early tumor onset in LFS patients. 
 
-This script contains all the helper functions to perform preprocess, predict and plot. 
-
 ~~~
     utils.R
 ~~~
 
+This script contains all the helper functions to perform preprocess, predict and plot. 
+
+~~~
+    remove_confounders.R
+~~~ 
 This script runs the preprocessing which involves three steps:
 
 1. Outlier removal
@@ -19,13 +22,11 @@ This script runs the preprocessing which involves three steps:
 3. Removal of array confounder
 
 ~~~
-    remove_confounders.R
-~~~  
+    predictSingleExtVal.R
+~~~
 
 This script runs the feature selection, model fitting and outputs the test results.
 
-~~~
-    predictSingleExtVal.R
-~~~
+
 
 
