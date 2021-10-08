@@ -109,12 +109,14 @@ get_outliers <- function(pc,n) {
 ##########
 
 generate_pcsummary <- function(pc_clin) {
-  pcs <- colnames(pc_clin)[grepl( "PC" , names(pc_clin) )] ;
-  allp_array <- list() ; allp_batch <- list() ; allp_agesamplecollection<- list()
+  pcs <- colnames(pc_clin)[grepl( "PC" , names(pc_clin) )] 
+  allp_array <- list() 
+  allp_batch <- list() 
+  allp_agesamplecollection<- list()
   for (i in pcs) {
     allp_array[[i]] <- wilcox.test(pc_clin[,i] ~ as.factor(pc_clin$array))$p.value
     allp_batch[[i]] <- summary(aov(pc_clin[,i] ~ as.factor(pc_clin$batch)))[[1]][1,"Pr(>F)"]
-    allp_batch[[i]] <- cor.test(pc_clin[,i] ~ as.factor(pc_clin$agesamplecollection)$p.value
+    allp_batch[[i]] <- cor.test(pc_clin[,i] ~ as.factor(pc_clin$agesamplecollection))$p.value
   }
 
   allp <- data.frame(PC=pcs,
@@ -141,9 +143,11 @@ generate_pcsummary <- function(pc_clin) {
 ##########
 
 scale_df <- function(data,genes) {
-  tmp <- data[genes]
+  int_feat <- intersect(names(data), genes)
+  tmp <- data[,int_feat]
   tmp <- scale(tmp, center=TRUE,scale=TRUE)
-  data_scaled <- cbind(data[,-genes],tmp)
+  clin_vars <- names(data)[!names(data) %in% int_feat]
+  data_scaled <- cbind(data[,clin_vars],tmp)
   return(data_scaled)
 }
 
@@ -159,8 +163,9 @@ scale_df <- function(data,genes) {
 ##########
 
 aggregate_probes <- function(data,features) {
+  data <- data[,!grepl('ch', names(data))]
   allprobes <- colnames(data)[grepl('cg',colnames(data))]
-  clincols <- colnames(data)[-allprobes]
+  clincols <- colnames(data)[!names(data) %in% allprobes]
   feat_data <- data[c(clincols,features$probe)]
   meth <- data.frame(t(feat_data[features$probe])) 
   colnames(meth) <- as.character(feat_data$SentrixID)
@@ -201,10 +206,13 @@ pred_cancer_xgboost_test <- function(test_dat, features) {
   test_y <- factor(ifelse(test_dat$ageofonset > age_cutoff | is.na(test_dat$ageofonset), "No", "Yes"))
 
   # get clinical data
-  test_clin <- test_dat[colnames(data)[!grepl('cg',colnames(data))]]
+  test_clin <- test_dat[1:42]
+  
+  # adding this. get features from model
+  mod_feats <- model[[11]]$xNames
 
   # get model data
-  test_dat <- test_dat[, model_features]
+  test_dat <- test_dat[, mod_feats]
 
   test.predictions <- predict(model,
                               data.matrix(test_dat),
@@ -252,7 +260,6 @@ get_f1 <- function (data) {
   f1 <- 2*precision*recall/(precision+recall)
   return(f1)
 }
-
 
 ##########
 # Function to get ROC, F1, sensitivity and specificity at optimal cutoff in test data
