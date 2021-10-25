@@ -6,6 +6,9 @@ library(data.table)
 # color universe here: http://materializecss.com/color.html
 # icon universe here :http://materializecss.com/icons.html
 
+# increase limit for data upload to 30MB
+options(shiny.maxRequestSize = 30*1024^2)
+
 source('global.R')
 source('utils.R')
 ui <- material_page(
@@ -24,7 +27,7 @@ ui <- material_page(
     material_column(
       width = 3,
       material_card(
-        title = "Upload your data",
+        title = "1. Upload your data",
         depth = 4,
         fileInput('target_upload', 'Choose file to upload',
                   accept = c(
@@ -35,23 +38,35 @@ ui <- material_page(
                   ))
         ),
       br(), br(),
-      material_checkbox(input_id = 'array_correction',
-                        label = 'PC correction for 450k data?',
-                        initial_value = FALSE),
-      br(), br(),
-      material_checkbox(input_id = 'batch_correction',
-                        label = 'Batch correction?',
-                        initial_value = FALSE),
+      
+      material_card(
+        title = '2. Apply data corrections',
+        depth = 4,
+        material_checkbox(input_id = 'remove_outliers',
+                          label = 'Remove outliers',
+                          initial_value = FALSE),
+        br(), br(),
+        material_checkbox(input_id = 'array_correction',
+                          label = 'PC correction for array (only if your data has 450k)',
+                          initial_value = FALSE),
+        br(), br(),
+        material_checkbox(input_id = 'batch_correction',
+                          label = 'Batch correction?',
+                          initial_value = FALSE)
+      )
       ),
     material_column(width = 9,
                     # Define side-nav tab content
                     material_side_nav_tab_content(
                       side_nav_tab_id = "pred",
-                      uiOutput('directions_and_title'),
-                      DT::dataTableOutput("sample_table"),
-                      material_checkbox(input_id = 'compare_results',
-                                        label = "Visualize predictions with the author's results",
-                                        initial_value = FALSE),
+                      material_card(
+                        depth = 4,
+                        uiOutput('directions_and_title'),
+                        DT::dataTableOutput("sample_table"),
+                        material_checkbox(input_id = 'compare_results',
+                                          label = "Visualize predictions with the author's results",
+                                          initial_value = FALSE),
+                      ),
                       material_column(width = 12,
                                       plotOutput('author_plot')
                                       
@@ -77,27 +92,47 @@ ui <- material_page(
 )
 
 server <- function(input, output) {
+  
+  # reactive data frame that the user uploads. 
   user_preds <- reactive({
     ac <- input$array_correction
     bc <- input$batch_correction
+    rl <- input$remove_outliers
     
     inFile <- input$target_upload
     if (is.null(inFile))
       return(NULL)
     # This can be replaced later in the pipeline so that this part starts once removing confounders is done
-    # df <- readRDS('example_data.rda')
+    # df <- readRDS('df_small.rda')
     df <- readRDS(inFile$datapath)
-    
+
+    if(rl){
+      message('---- Removing outliers')
+      
+      # remove outliers
+      all_probes <- colnames(df)[grepl('cg',colnames(df))]
+      all_clin <- names(df)[!names(df) %in% all_probes]
+      pc <- prcomp(as.matrix(df[,all_probes]), scale = TRUE)
+      pc_clin_before <- cbind(df[,all_clin],pc$x)
+      keep <- get_outliers(pc_clin_before,3)
+      df <- df[df$SentrixID %in% keep,]
+    }
     if(ac){
       message('---- Begin array correction')
-      
+      ## Remove array confounder ## 
+      df_450k <- df[df$array == "450",]
+     
+      ## correct 450k data ##
+      corrected_450k <- remove_array_confounder(df_450k)
+      df_850k <- df[df$array == "850",]
+      df <- rbind(corrected_450k,df_850k)
+    
     }
     
     if(bc){
       message('---- Begin batch correction')
-      
+      df <- remove_batch_confounder(df)
     }
-    
     
     ## Read in features ## 
     features <- read.csv('features.txt',sep='\t')
@@ -118,7 +153,7 @@ server <- function(input, output) {
     
     # run model
     result_dat <- calibrated_results
-    save(result_dat, file ='temp_results.rda')
+    # save(result_dat, file ='temp_results.rda')
     
     return(result_dat)
   })
@@ -126,9 +161,9 @@ server <- function(input, output) {
   output$directions_and_title <- renderUI({
     inFile <- input$target_upload
     if(is.null(inFile)){
-      h4('Upload your data and choose the type of analysis with the checkboxes')
+      h5("Once you've uploaded data, the model will run automatically and show results below")
     } else {
-      h4('Predicted probabilities with clinical data')
+      h5('Predicted probabilities with clinical data')
     }
   })
   
@@ -164,10 +199,6 @@ server <- function(input, output) {
     } else {
       NULL
     }
-    
- 
   })
-  
-
 }
 shinyApp(ui = ui, server = server)
