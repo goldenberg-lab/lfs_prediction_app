@@ -17,8 +17,12 @@ test$test_label <- ifelse(test$test_label==1, 'Yes', 'No')
 
 # calibrate probabilities
 temp_calibrated <- calibrate_probs_valli(train_results = valid, test_results = test)
+
+# validation and test data
 valid <- temp_calibrated[[1]]
 test <- temp_calibrated[[2]]
 
+# remove 
+rm(temp_calibrated)
 
 

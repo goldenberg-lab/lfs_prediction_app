@@ -2,6 +2,7 @@ library(shiny)
 library(shinymaterial)
 library(data.table)
 
+# Using shinymaterial package. links below have help.
 # overall help here: https://ericrayanderson.github.io/shinymaterial/
 # color universe here: http://materializecss.com/color.html
 # icon universe here :http://materializecss.com/icons.html
