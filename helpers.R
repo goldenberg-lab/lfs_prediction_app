@@ -1,7 +1,6 @@
 #####################################################################
 ############################# Libraries #############################
 #####################################################################
-
 require(reshape2)
 require(minfi)
 require(dplyr)
@@ -20,7 +19,9 @@ require(MLmetrics)
 ############################# Functions #############################
 #####################################################################
 
-
+##########
+# remove batch confounder using the batchEffectRemovel.rds file
+##########
 remove_batch_confounder <- function(data) {
   p_train <- readRDS('rds/batchEffectRemoval.rds')
   cols <- grepl( "cg" , names( data ))
@@ -36,7 +37,6 @@ remove_batch_confounder <- function(data) {
 ##########
 # Function to batch 450k data onto the 850k space
 ##########
-
 remove_array_confounder <- function(data) {
   cat("[  450k data onto 850k space ]","\n")
   models <- readRDS('rds/arrayEffectRemoval.rds')
@@ -60,7 +60,6 @@ remove_array_confounder <- function(data) {
 ##########
 # Function that identifies ids of outliers
 ##########
-
 get_outliers <- function(pc,n) {
   pc$PC1 <- scale(pc$PC1)
   pc$PC2 <- scale(pc$PC2)
@@ -77,37 +76,9 @@ get_outliers <- function(pc,n) {
 }
 
 ##########
-# Function that quantifies association between PCs and confounders
-##########
-
-generate_pcsummary <- function(pc_clin) {
-  pcs <- colnames(pc_clin)[grepl( "PC" , names(pc_clin) )] 
-  allp_array <- list() 
-  allp_batch <- list() 
-  allp_agesamplecollection<- list()
-  for (i in pcs) {
-    allp_array[[i]] <- wilcox.test(pc_clin[,i] ~ as.factor(pc_clin$array))$p.value
-    allp_batch[[i]] <- summary(aov(pc_clin[,i] ~ as.factor(pc_clin$batch)))[[1]][1,"Pr(>F)"]
-    allp_batch[[i]] <- cor.test(pc_clin[,i] ~ as.factor(pc_clin$agesamplecollection))$p.value
-  }
-  
-  allp <- data.frame(PC=pcs,
-                     batch_p=as.numeric(do.call("cbind",allp_batch)),
-                     array_p=as.numeric(do.call("cbind",allp_array)),
-                     agesamplecollection_p=as.numeric(do.call("cbind",allp_agesamplecollection)))
-  allp <- cbind(allp,data.frame(t(summary(pc)$importance)))
-  allp$batch_padj <- allp$batch_p/allp$Proportion.of.Variance
-  allp$array_padj <- allp$array_p/allp$Proportion.of.Variance
-  allp$agesamplecollection_padj <- allp$agesamplecollection_p/allp$Proportion.of.Variance
-  return(allp)
-}
-
-
-##########
 # Function to scale methylation variables
 ##########
-
-e_df <- function(data,genes) {
+scale_df <- function(data,genes) {
   int_feat <- intersect(names(data), genes)
   tmp <- data[,int_feat]
   tmp <- scale(tmp, center=TRUE,scale=TRUE)
@@ -119,7 +90,6 @@ e_df <- function(data,genes) {
 ##########
 # Function to extract probes based on location and aggregate by gene
 ##########
-
 aggregate_probes <- function(data,features) {
   data <- data[,!grepl('ch', names(data))]
   allprobes <- colnames(data)[grepl('cg',colnames(data))]
@@ -139,7 +109,6 @@ aggregate_probes <- function(data,features) {
 ##########
 # Function to predict cancer before a given age of onset cutoff given a xgboost model
 ##########
-
 pred_cancer_xgboost_test <- function(test_dat, features) {
   
   ## Read in predictive model ##
@@ -192,7 +161,6 @@ platt_scaling <- function(test_results) {
 ##########
 # Function to calculate F1 score
 ##########
-
 get_f1 <- function (data) {
   precision <- Precision(data$test_label, data$predicted_label, positive = 1)
   recall <- Recall(data$test_label, data$predicted_label, positive = 1)
@@ -203,7 +171,6 @@ get_f1 <- function (data) {
 ##########
 # Function to get ROC, F1, sensitivity and specificity at optimal cutoff in test data
 ##########
-
 ROCInfo_atcutoff <- function(data,other_title) {
   
   # decision boundary 
@@ -249,49 +216,6 @@ ROCInfo_atcutoff <- function(data,other_title) {
                 sensitivity = sensitivity, 
                 specificity = specificity,
                 f1 = f1) )
-}
-
-##########
-# Function that plots the top 2 PCs coloured by confounders
-##########
-
-generate_pcplots <- function(pc_clin) {
-  cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(pc$gender)))
-  pdf(paste0(outdir,"Plots/",output,"_PCA_gender.pdf"),width=9,height=7)
-  cancerstatusplot <- ggplot(pc_clin,aes(PC1,PC2,color=cancerstatus)) + 
-    geom_point(size = 3, alpha = 0.7) +
-    xlab('PC1') + ylab('PC2') +
-    scale_color_manual(name = '', values = cols) + 
-    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
-    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
-    theme_minimal()
-  print(cancerstatusplot)
-  suppressMessages(dev.off())
-  
-  pdf(paste0(outdir,"Plots/",output,"_PCA_agesamplecollection.pdf"),width=9,height=7)
-  ageplot <- ggplot(pc_clin,aes(PC1,PC2,color=agesamplecollection)) + 
-    geom_point(size = 3, alpha = 0.7) +
-    xlab('PC1') + ylab('PC2') +
-    scale_color_manual(name = '', values = cols) + 
-    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
-    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
-    theme_minimal()
-  print(ageplot)
-  suppressMessages(dev.off())
-  
-  cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(pc$batch)))
-  pc_clin$array <- factor(pc_clin$array)
-  pdf(paste0(outdir,"Plots/",output,"_PCA_confounders.pdf"),width=9,height=7)
-  confounderplot <- ggplot(pc_clin,aes(PC1,PC2,color=batch,shape=array)) + 
-    geom_point(size = 3, alpha = 0.7) +
-    xlab('PC1') + ylab('PC2') +
-    scale_color_manual(name = '', values = cols) + 
-    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
-    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
-    theme_minimal()
-  print(confounderplot)
-  suppressMessages(dev.off())
-  
 }
 
 ##########
@@ -358,7 +282,7 @@ compare_results <- function(temp){
 }
 
 ##########
-
+# takes the results from the user and puts them in the format to be plotted along side the author's results
 ##########
 evaluate_results <- function(data, type){
   # NULL
@@ -414,144 +338,75 @@ evaluate_results <- function(data, type){
   return(result)
 }
 
-# ##########
-# ##########
-# get_results <- function(temp, age_pred){
-#   temp$preds <- temp$test_pred_calibrated.Yes
-#   temp <- temp[!duplicated(temp$tm_donor),]
-#   temp$test_label <-  factor(temp$test_label, levels = c('Yes', 'No'))
-#   # temp$test_label_number <- ifelse(temp$test_label == 'Yes', 1, 0)
-#   # temp <- calibrate_probs(test_results = temp)
-#   # temp$preds <- probability.calibration(as.numeric(temp$test_label_number), as.numeric(round(temp$test_pred.Yes, 3)))
-#   temp$pred_label <- ifelse(temp$preds >= .5, 'Yes', 'No')
-#   temp$pred_label <- factor(temp$pred_label, levels=c('Yes', 'No'))
-#   
-#   # HERE get sensitivity and specificity
-#   model_info <-caret::confusionMatrix(temp$pred_label, temp$test_label)
-#   f1_meas <- round(caret::F_meas( temp$pred_label, temp$test_label),2)
-#   mod_sens <- round(model_info$byClass[[1]], 2)
-#   mod_spec <-round(model_info$byClass[[2]], 2)
-#   auc_value <- round(pROC::auc(temp$test_label, temp$preds), 2)
-#   temp_null <- temp[temp$cancer_diagnosis=='Unaffected',]
-#   temp_cancer <- temp[temp$cancer_diagnosis!='Unaffected',]
-#   
-#     null_plot = conmat_paper(data = temp_null, predict = 'preds',actual = 'test_label', cutoff = 0.5,get_plot = TRUE,other_title = '', data_type = 'null', age_pred = age_pred)
-#     cancer_plot = conmat_paper(data = temp_cancer, predict = 'preds',actual = 'test_label', cutoff = 0.5,get_plot = TRUE,other_title = '', data_type = 'cancer',age_pred = age_pred)
-#     
-#   
-#   
-#   return(list(null_plot, cancer_plot))
-# }
+#### THE BELOW FUNCTIONS ARE NOT IN USE YET 
 
+##########
+# Function that plots the top 2 PCs coloured by confounders
+##########
+generate_pcplots <- function(pc_clin) {
+  cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(pc$gender)))
+  pdf(paste0(outdir,"Plots/",output,"_PCA_gender.pdf"),width=9,height=7)
+  cancerstatusplot <- ggplot(pc_clin,aes(PC1,PC2,color=cancerstatus)) + 
+    geom_point(size = 3, alpha = 0.7) +
+    xlab('PC1') + ylab('PC2') +
+    scale_color_manual(name = '', values = cols) + 
+    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
+    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
+    theme_minimal()
+  print(cancerstatusplot)
+  suppressMessages(dev.off())
+  
+  pdf(paste0(outdir,"Plots/",output,"_PCA_agesamplecollection.pdf"),width=9,height=7)
+  ageplot <- ggplot(pc_clin,aes(PC1,PC2,color=agesamplecollection)) + 
+    geom_point(size = 3, alpha = 0.7) +
+    xlab('PC1') + ylab('PC2') +
+    scale_color_manual(name = '', values = cols) + 
+    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
+    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
+    theme_minimal()
+  print(ageplot)
+  suppressMessages(dev.off())
+  
+  cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(pc$batch)))
+  pc_clin$array <- factor(pc_clin$array)
+  pdf(paste0(outdir,"Plots/",output,"_PCA_confounders.pdf"),width=9,height=7)
+  confounderplot <- ggplot(pc_clin,aes(PC1,PC2,color=batch,shape=array)) + 
+    geom_point(size = 3, alpha = 0.7) +
+    xlab('PC1') + ylab('PC2') +
+    scale_color_manual(name = '', values = cols) + 
+    geom_hline(yintercept= 0, linetype="dashed",color = "grey", size=1) +
+    geom_vline(xintercept=0, linetype="dashed", color = "grey", size=1) +
+    theme_minimal()
+  print(confounderplot)
+  suppressMessages(dev.off())
+  
+}
 
 
 ##########
-# function that creates the confusion matrix plot
+# Function that quantifies association between PCs and confounders
 ##########
-# 
-# conmat_paper <- function( data, predict, actual, cutoff, get_plot, other_title, data_type, age_pred)
-# {	
-#   predict <- data[[predict]]
-#   actual  <- relevel( as.factor( data[[actual]] ), "Yes" )
-#   if(data_type == 'null') {
-#     age <- data$agesamplecollection
-#     cancer_name <- data$cancer_diagnosis
-#     gender <- data$gender
-#     cancer_atdraw <- data$cancer_atdraw
-#     user <- data$user
-#     # gender <- ifelse(data$`F`==1, 'Female', 'Male')
-#     # cancer_atdraw <- ifelse(data$`Y`==1, 'cancer', 'no_cancer')
-#     result <- data.table( actual = actual, predict = predict, age = age, cancer_name = cancer_name,
-#                           gender=gender, cancer_atdraw=cancer_atdraw, user=user)
-#     if(age_pred == 6){
-#       result$actual <- 'No cancer before 6'
-#     } else if (age_pred == 5){
-#       result$actual <- 'No cancer before 5'
-#     } else {
-#       result$actual <- 'No cancer before 4'
-#     }
-#     
-#     # caculating each pred falls into which category for the confusion matrix
-#     result[ , type := ifelse( predict >= cutoff, 'FP', 'TN' )
-#             %>% as.character() ]
-#     
-#     result$type <- ifelse(result$user=='User', 'User', result$type)
-#     
-#     library(ggrepel)
-#     # jittering : can spread the points along the x axis 
-#     result <- as.data.frame(result)
-#     result$age <- round(result$age/12, 2)
-#     plot <- ggplot( result, aes( actual, predict, color = type ) ) + 
-#       geom_violin( fill = "grey", color = NA ) +
-#       geom_jitter(size = 3, show.legend = TRUE) +
-#       scale_color_manual(name = '',
-#                          values = c('red', 'blue', 'green'),
-#                          breaks = c( "FP", "TN",'User'))+
-#       geom_hline( yintercept = cutoff, color = 'black', alpha = 0.6, linetype = 2 ) + 
-#       # geom_text(aes_string(label = text_name),alpha = 0.7, fontface = "bold",position=position_jitter(width = 0.49, height = 0), show.legend = FALSE)+
-#       # geom_vline(xintercept = 1.5, linetype = 2) +
-#       scale_y_continuous( limits = c(0, 1.01 ) ) + 
-#       guides( col = guide_legend( nrow = 2 ) ) + # adjust the legend to have two rows  
-#       labs(subtitle= other_title, y='Predictions' , x = '') +
-#       theme(text = element_text(size=10))+
-#       theme(plot.subtitle = element_text(size=8)) +
-#       ggthemes::theme_base()
-#     
-#     if(get_plot) {
-#       return(plot)
-#     } else {
-#       return(as.data.frame(result))
-#     }
-#     
-#   } else {
-#     age <- data$ageofonset
-#     
-#     age_diff <- data$ageofonset - data$agesamplecollection
-#     cancer_atdraw <- data$cancer_atdraw
-#     age_sample_collect <- data$agesamplecollection
-#     cancer_name <- data$cancer_diagnosis
-#     gender <- data$gender
-#     result <- data.table( actual = actual, predict = predict, age = age,age_diff= age_diff, cancer_name = cancer_name, gender=gender, cancer_atdraw=cancer_atdraw)
-#     
-#     
-#     result$actual <- ifelse(result$actual=='Yes', paste0('Cancer before ', age_pred),paste0('Cancer after ', age_pred))
-#     result$actual <- factor(result$actual, levels = c( paste0('Cancer before ', age_pred), paste0('Cancer after ', age_pred)))
-#     
-#     # caculating each pred falls into which category for the confusion matrix
-#     result[ , type := ifelse( predict >= cutoff & actual ==  paste0('Cancer before ', age_pred), "TP",
-#                               ifelse( predict >= cutoff & actual == paste0('Cancer after ', age_pred), "FP", 
-#                                       ifelse( predict <  cutoff & actual ==paste0('Cancer before ', age_pred), "FN", "TN" ) ) ) %>% as.factor() ]
-#     
-#     library(ggrepel)
-#     # jittering : can spread the points along the x axis 
-#     result <- as.data.frame(result)
-#     result$age <- round(result$age/12, 2)
-#     plot <- ggplot( result, aes( actual, predict, color = type ) ) + 
-#       geom_violin( fill = "grey", color = NA ) +
-#       geom_jitter(size = 3, show.legend = TRUE) +
-#       scale_color_manual(name = '',
-#                          values = c('darkgreen', 'darkorange','red', 'blue'),
-#                          breaks = c( "TP", "FN", "FP", "TN" ))+
-#       geom_hline( yintercept = cutoff, color = 'black', alpha = 0.6, linetype = 2 ) + 
-#       # geom_text(aes_string(label = text_name),alpha = 0.7, fontface = "bold",position=position_jitter(width = 0.49, height = 0), show.legend = FALSE)+
-#       geom_vline(xintercept = 1.5, linetype = 2) +
-#       scale_y_continuous( limits = c( 0, 1.01 ) ) + 
-#       guides( col = guide_legend( nrow = 2 ) ) + # adjust the legend to have two rows  
-#       labs(subtitle= other_title, y= 'Predictions', x = '' ) +
-#       theme(text = element_text(size=10)) +
-#       theme(plot.subtitle = element_text(size=8)) +
-#       ggthemes::theme_base()
-#     
-#     
-#     plot
-#     if(get_plot) {
-#       return(plot)
-#     } else {
-#       return(as.data.frame(result))
-#     }
-#     
-#   }
-#   
-# }
+generate_pcsummary <- function(pc_clin) {
+  pcs <- colnames(pc_clin)[grepl( "PC" , names(pc_clin) )] 
+  allp_array <- list() 
+  allp_batch <- list() 
+  allp_agesamplecollection<- list()
+  for (i in pcs) {
+    allp_array[[i]] <- wilcox.test(pc_clin[,i] ~ as.factor(pc_clin$array))$p.value
+    allp_batch[[i]] <- summary(aov(pc_clin[,i] ~ as.factor(pc_clin$batch)))[[1]][1,"Pr(>F)"]
+    allp_batch[[i]] <- cor.test(pc_clin[,i] ~ as.factor(pc_clin$agesamplecollection))$p.value
+  }
+  
+  allp <- data.frame(PC=pcs,
+                     batch_p=as.numeric(do.call("cbind",allp_batch)),
+                     array_p=as.numeric(do.call("cbind",allp_array)),
+                     agesamplecollection_p=as.numeric(do.call("cbind",allp_agesamplecollection)))
+  allp <- cbind(allp,data.frame(t(summary(pc)$importance)))
+  allp$batch_padj <- allp$batch_p/allp$Proportion.of.Variance
+  allp$array_padj <- allp$array_p/allp$Proportion.of.Variance
+  allp$agesamplecollection_padj <- allp$agesamplecollection_p/allp$Proportion.of.Variance
+  return(allp)
+}
+
 
 

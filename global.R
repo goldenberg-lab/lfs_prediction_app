@@ -2,7 +2,7 @@ library(caret)
 library(tidyverse)
 source('helpers.R')
 
-# get model 
+# get model and validation data for probability calibration below (otherwise valid not used)
 mod <- readRDS('valid_model.rds')
 valid <- mod[[2]]
 mod <- mod[[1]]
@@ -23,6 +23,6 @@ valid <- temp_calibrated[[1]]
 test <- temp_calibrated[[2]]
 
 # remove 
-rm(temp_calibrated)
+rm(temp_calibrated, valid)
 
 
